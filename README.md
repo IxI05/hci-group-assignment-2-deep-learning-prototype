@@ -44,26 +44,50 @@ After analysis is completed, the **Use AI Detection Information** button can aut
 
 ## Requirements
 
-- Python 3
+- Python 3.10 or later
 - A working camera for live capture
 - Python packages listed in `requirements.txt`
 
+Tkinter is included with most Python installs. If the camera is unavailable, the prototype can still analyze uploaded JPG/PNG images.
+
+## Install Dependencies
+
+macOS:
+
+```sh
+python3 -m pip install -r requirements.txt
+```
+
+Windows:
+
+```bat
+py -3 -m pip install -r requirements.txt
+```
+
 ## Run
 
-On macOS, double-click:
+macOS, double-click:
 
 ```sh
 run_app.command
 ```
 
-Or run from the project folder:
+Windows, double-click:
+
+```bat
+run_app.bat
+```
+
+Or run manually from the project folder.
+
+macOS:
 
 ```sh
 python3 "HCI-images-deep learning/test_2.py"
 ```
 
-## Install Dependencies
+Windows:
 
-```sh
-python3 -m pip install -r requirements.txt
+```bat
+py -3 "HCI-images-deep learning\test_2.py"
 ```

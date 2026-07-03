@@ -24,6 +24,37 @@ TEXT = "#202124"
 MUTED = "#6b7280"
 
 
+def get_ui_font_family(platform_name=None):
+    """Choose a native-looking font that exists on the target platform."""
+    current_platform = platform_name or sys.platform
+    if current_platform.startswith("win"):
+        return "Segoe UI"
+    if current_platform == "darwin":
+        return "Helvetica Neue"
+    return "Arial"
+
+
+def ui_font(size, weight=None):
+    if weight:
+        return (get_ui_font_family(), size, weight)
+    return (get_ui_font_family(), size)
+
+
+def get_camera_backend(platform_name=None):
+    """Use DirectShow on Windows to make OpenCV camera startup more reliable."""
+    current_platform = platform_name or sys.platform
+    if current_platform.startswith("win") and hasattr(cv2, "CAP_DSHOW"):
+        return cv2.CAP_DSHOW
+    return None
+
+
+def open_camera_capture():
+    backend = get_camera_backend()
+    if backend is None:
+        return cv2.VideoCapture(0)
+    return cv2.VideoCapture(0, backend)
+
+
 def build_machine_learning_model():
     """
     Machine Learning Section: simulation learning from a historical dataset.
@@ -144,14 +175,21 @@ class AdvancedBioenergyApp:
         self.train_machine_learning_model()
 
         # 2. Camera
-        self.cap = cv2.VideoCapture(0) # allow system to open camera
+        self.cap = open_camera_capture() # allow system to open camera
         self.current_frame = None
-        self.is_camera_running = True
+        self.is_camera_running = self.cap is not None and self.cap.isOpened()
         self.audio_lock = threading.Lock()
         self.last_analysis_result = None
 
         # 3. Create UI Interface (创建 UI 界面)
         self.create_widgets()
+        if not self.is_camera_running:
+            self.video_label.config(
+                text="Camera not active\nUpload an image to analyze",
+                fg="white",
+                font=ui_font(15, "bold"),
+                justify=tk.CENTER,
+            )
 
         # 4. Enable thread to update camera footage in real time (时更新Camera画面)
         self.video_thread = threading.Thread(target=self.video_stream_loop, daemon=True)
@@ -227,7 +265,7 @@ class AdvancedBioenergyApp:
         header = tk.Label(
             self.window,
             text="Farm2Energy - Report Waste / Deep Learning Detection",
-            font=("Microsoft YaHei", 16, "bold"),
+            font=ui_font(16, "bold"),
             bg=GREEN_DARK,
             fg="white",
             pady=12,
@@ -240,7 +278,7 @@ class AdvancedBioenergyApp:
         detection_frame = tk.LabelFrame(
             main_frame,
             text=" Deep Learning Detection ",
-            font=("Microsoft YaHei", 11, "bold"),
+            font=ui_font(11, "bold"),
             bg="white",
             fg=TEXT,
             padx=12,
@@ -257,7 +295,7 @@ class AdvancedBioenergyApp:
         btn_capture = tk.Button(
             scan_controls,
             text="Capture & Analyze",
-            font=("Microsoft YaHei", 11, "bold"),
+            font=ui_font(11, "bold"),
             bg=ORANGE,
             fg="white",
             command=self.capture_and_analyze,
@@ -268,7 +306,7 @@ class AdvancedBioenergyApp:
         btn_upload = tk.Button(
             scan_controls,
             text="Upload & Analyze",
-            font=("Microsoft YaHei", 11, "bold"),
+            font=ui_font(11, "bold"),
             bg=GREEN,
             fg="white",
             command=self.upload_file_analyze,
@@ -285,7 +323,7 @@ class AdvancedBioenergyApp:
         result_frame = tk.LabelFrame(
             detection_frame,
             text=" Deep learning result - Model v2.1 image analysis ",
-            font=("Microsoft YaHei", 10, "bold"),
+            font=ui_font(10, "bold"),
             bg="white",
             fg=TEXT,
             padx=10,
@@ -303,7 +341,7 @@ class AdvancedBioenergyApp:
         self.apply_button = tk.Button(
             detection_frame,
             text="Use AI Detection Information",
-            font=("Microsoft YaHei", 11, "bold"),
+            font=ui_font(11, "bold"),
             bg="white",
             fg=GREEN_DARK,
             disabledforeground="#9ca3af",
@@ -318,7 +356,7 @@ class AdvancedBioenergyApp:
         report_frame = tk.LabelFrame(
             main_frame,
             text=" Report Waste Interface ",
-            font=("Microsoft YaHei", 11, "bold"),
+            font=ui_font(11, "bold"),
             bg="white",
             fg=TEXT,
             padx=14,
@@ -333,7 +371,7 @@ class AdvancedBioenergyApp:
         tk.Label(
             image_card,
             text="MANURE IMAGE",
-            font=("Microsoft YaHei", 10, "bold"),
+            font=ui_font(10, "bold"),
             bg=GREEN_SOFT,
             fg=TEXT,
             anchor="w",
@@ -341,7 +379,7 @@ class AdvancedBioenergyApp:
         self.image_status_label = tk.Label(
             image_card,
             text="Required JPG/PNG evidence for AI analysis",
-            font=("Microsoft YaHei", 9),
+            font=ui_font(9),
             bg=GREEN_SOFT,
             fg=MUTED,
             anchor="w",
@@ -358,27 +396,27 @@ class AdvancedBioenergyApp:
             textvariable=self.waste_type_var,
             values=("Cow manure", "Goat manure", "Chicken manure", "Mixed manure"),
             state="readonly",
-            font=("Microsoft YaHei", 11),
+            font=ui_font(11),
         )
         self.waste_type_combo.pack(fill=tk.X, ipady=6, pady=(0, 12))
 
         self.add_field_label(report_frame, "ESTIMATED QUANTITY")
-        self.quantity_entry = tk.Entry(report_frame, textvariable=self.quantity_var, font=("Microsoft YaHei", 12), relief=tk.GROOVE, bd=2)
+        self.quantity_entry = tk.Entry(report_frame, textvariable=self.quantity_var, font=ui_font(12), relief=tk.GROOVE, bd=2)
         self.quantity_entry.pack(fill=tk.X, ipady=9, pady=(0, 12))
 
         self.add_field_label(report_frame, "FARM LOCATION")
-        self.location_entry = tk.Entry(report_frame, textvariable=self.location_var, font=("Microsoft YaHei", 12), relief=tk.GROOVE, bd=2)
+        self.location_entry = tk.Entry(report_frame, textvariable=self.location_var, font=ui_font(12), relief=tk.GROOVE, bd=2)
         self.location_entry.pack(fill=tk.X, ipady=9, pady=(0, 12))
 
         self.add_field_label(report_frame, "CONDITION NOTES")
-        self.condition_text = tk.Text(report_frame, height=7, font=("Microsoft YaHei", 11), wrap=tk.WORD, relief=tk.GROOVE, bd=2)
+        self.condition_text = tk.Text(report_frame, height=7, font=ui_font(11), wrap=tk.WORD, relief=tk.GROOVE, bd=2)
         self.condition_text.insert("1.0", "Stored under covered area. Access through east gate.")
         self.condition_text.pack(fill=tk.BOTH, expand=True, pady=(0, 14))
 
         tk.Button(
             report_frame,
             text="Submit Report",
-            font=("Microsoft YaHei", 12, "bold"),
+            font=ui_font(12, "bold"),
             bg=GREEN_DARK,
             fg="white",
             command=self.submit_report_preview,
@@ -389,17 +427,17 @@ class AdvancedBioenergyApp:
         card = tk.Frame(parent, bg="white", highlightbackground="#e5e7eb", highlightthickness=1)
         card.grid(row=row, column=column, sticky="ew", padx=5, pady=4)
         parent.grid_columnconfigure(column, weight=1)
-        value_label = tk.Label(card, text=value, font=("Microsoft YaHei", 18, "bold"), bg="white", fg=TEXT)
+        value_label = tk.Label(card, text=value, font=ui_font(18, "bold"), bg="white", fg=TEXT)
         value_label.pack(anchor="w", padx=14, pady=(8, 0))
-        tk.Label(card, text=label, font=("Microsoft YaHei", 10), bg="white", fg=MUTED).pack(anchor="w", padx=14, pady=(0, 8))
+        tk.Label(card, text=label, font=ui_font(10), bg="white", fg=MUTED).pack(anchor="w", padx=14, pady=(0, 8))
         return value_label
 
     def create_result_tile(self, parent, title, value, row, column):
         tile = tk.Frame(parent, bg=GREEN_SOFT)
         tile.grid(row=row, column=column, sticky="ew", padx=5, pady=5)
         parent.grid_columnconfigure(column, weight=1)
-        tk.Label(tile, text=title.upper(), font=("Microsoft YaHei", 9, "bold"), bg=GREEN_SOFT, fg=MUTED).pack(anchor="w", padx=12, pady=(8, 0))
-        value_label = tk.Label(tile, text=value, font=("Microsoft YaHei", 12, "bold"), bg=GREEN_SOFT, fg=TEXT)
+        tk.Label(tile, text=title.upper(), font=ui_font(9, "bold"), bg=GREEN_SOFT, fg=MUTED).pack(anchor="w", padx=12, pady=(8, 0))
+        value_label = tk.Label(tile, text=value, font=ui_font(12, "bold"), bg=GREEN_SOFT, fg=TEXT)
         value_label.pack(anchor="w", padx=12, pady=(0, 8))
         return value_label
 
@@ -407,7 +445,7 @@ class AdvancedBioenergyApp:
         tk.Label(
             parent,
             text=text,
-            font=("Microsoft YaHei", 9, "bold"),
+            font=ui_font(9, "bold"),
             bg="white",
             fg="#666666",
             anchor="w",
@@ -416,6 +454,9 @@ class AdvancedBioenergyApp:
     def video_stream_loop(self):
         """Projecting camera feed onto the Tkinter interface in real time"""
         while self.is_camera_running:
+            if self.cap is None or not self.cap.isOpened():
+                self.is_camera_running = False
+                break
             ret, frame = self.cap.read()
             if ret:
                 self.current_frame = cv2.resize(frame, (500, 380))
