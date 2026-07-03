@@ -143,6 +143,10 @@ def get_default_location():
     return ""
 
 
+def get_default_condition_note():
+    return ""
+
+
 def should_start_maximized():
     return True
 
@@ -658,7 +662,7 @@ class AdvancedBioenergyApp:
 
         self.add_field_label(self.report_frame, "CONDITION NOTES")
         self.condition_text = tk.Text(self.report_frame, height=7, font=ui_font(11), wrap=tk.WORD, relief=tk.GROOVE, bd=2)
-        self.condition_text.insert("1.0", "Stored under covered area. Access through east gate.")
+        self.condition_text.insert("1.0", get_default_condition_note())
         self.condition_text.pack(fill=tk.BOTH, expand=True, pady=(0, 14))
 
         self.create_button(

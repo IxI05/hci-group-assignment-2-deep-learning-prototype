@@ -36,6 +36,10 @@ def test_default_location_is_empty():
     assert farm2energy_app.get_default_location() == ""
 
 
+def test_default_condition_note_is_empty():
+    assert farm2energy_app.get_default_condition_note() == ""
+
+
 def test_empty_location_does_not_block_image_upload(monkeypatch):
     class FakeCapture:
         def isOpened(self):
