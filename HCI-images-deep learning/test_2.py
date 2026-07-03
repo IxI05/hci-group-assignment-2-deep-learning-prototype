@@ -139,6 +139,10 @@ def get_submit_feedback_text():
     return "Submitted"
 
 
+def get_default_location():
+    return ""
+
+
 def should_start_maximized():
     return True
 
@@ -632,7 +636,7 @@ class AdvancedBioenergyApp:
 
         self.waste_type_var = tk.StringVar(value="Cow manure")
         self.quantity_var = tk.StringVar()
-        self.location_var = tk.StringVar(value="Klang, Selangor")
+        self.location_var = tk.StringVar(value=get_default_location())
 
         self.add_field_label(self.report_frame, "WASTE TYPE")
         self.waste_type_combo = ttk.Combobox(
@@ -913,16 +917,19 @@ class AdvancedBioenergyApp:
             self.stop_camera_stream(release=False)
         file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg *.jpeg *.png")])
         if file_path:
-            img = cv2.imread(file_path)
-            if img is None:
-                messagebox.showerror("Image error", "The selected image could not be opened.")
-                return
-            img_resized = cv2.resize(img, (500, 380))
-            self.current_frame = img_resized.copy()
-            self.show_processed_image(img_resized)
-            self.process_and_ml_predict(img_resized)
-            self.media_state = get_next_media_state(self.media_state, "upload_image")
-            self.sync_media_buttons()
+            try:
+                img = cv2.imread(file_path)
+                if img is None:
+                    messagebox.showerror("Image error", "The selected image could not be opened.")
+                    return
+                img_resized = cv2.resize(img, (500, 380))
+                self.current_frame = img_resized.copy()
+                self.show_processed_image(img_resized)
+                self.process_and_ml_predict(img_resized)
+                self.media_state = get_next_media_state(self.media_state, "upload_image")
+                self.sync_media_buttons()
+            except Exception as e:
+                messagebox.showerror("Image error", f"The selected image could not be analyzed.\n{e}")
 
     def show_processed_image(self, image):
         rgb_img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
