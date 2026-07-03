@@ -137,6 +137,30 @@ def should_use_scrollable_content():
     return True
 
 
+def get_capture_button_text(media_state):
+    if media_state == "analyzed_image":
+        return "Retake Image"
+    return "Capture & Analyze"
+
+
+def get_upload_button_text(_media_state):
+    return "Upload Image"
+
+
+def get_next_media_state(current_state, action):
+    transitions = {
+        ("camera_preview", "capture_image"): "analyzed_image",
+        ("camera_preview", "upload_image"): "analyzed_image",
+        ("analyzed_image", "upload_image"): "analyzed_image",
+        ("analyzed_image", "retake_image"): "camera_preview",
+    }
+    return transitions.get((current_state, action), current_state)
+
+
+def should_close_camera_for_upload():
+    return True
+
+
 def build_machine_learning_model():
     """
     Machine Learning Section: simulation learning from a historical dataset.
@@ -268,6 +292,7 @@ class AdvancedBioenergyApp:
         self.speech_engine = None
         self.last_analysis_result = None
         self.active_screen = get_initial_screen()
+        self.media_state = "camera_preview"
 
         # 3. Create UI Interface (创建 UI 界面)
         self.create_widgets()
@@ -280,8 +305,8 @@ class AdvancedBioenergyApp:
             )
 
         # 4. Enable thread to update camera footage in real time (时更新Camera画面)
-        self.video_thread = threading.Thread(target=self.video_stream_loop, daemon=True)
-        self.video_thread.start()
+        self.video_thread = None
+        self.start_video_thread()
 
     def maximize_window(self):
         try:
@@ -315,6 +340,44 @@ class AdvancedBioenergyApp:
                 engine.stop()
             except Exception:
                 pass
+
+    def stop_camera_stream(self, release=False):
+        self.is_camera_running = False
+        if release and self.cap is not None:
+            try:
+                self.cap.release()
+            except Exception as e:
+                print(f"[Camera Error] Unable to release camera: {e}")
+            self.cap = None
+        video_thread = getattr(self, "video_thread", None)
+        if video_thread is not None and video_thread.is_alive() and threading.current_thread() is not video_thread:
+            video_thread.join(timeout=0.2)
+
+    def start_video_thread(self):
+        if not self.is_camera_running:
+            return
+        if self.video_thread is not None and self.video_thread.is_alive():
+            return
+        self.video_thread = threading.Thread(target=self.video_stream_loop, daemon=True)
+        self.video_thread.start()
+
+    def reopen_camera_stream(self):
+        self.stop_camera_stream(release=True)
+        self.cap = open_camera_capture()
+        self.is_camera_running = self.cap is not None and self.cap.isOpened()
+        self.current_frame = None
+        if self.is_camera_running:
+            self.video_label.config(text="", image="")
+            self.video_label.image = None
+            self.start_video_thread()
+        else:
+            self.video_label.config(
+                text="Camera not active\nUpload an image to analyze",
+                image="",
+                fg="white",
+                font=ui_font(15, "bold"),
+                justify=tk.CENTER,
+            )
 
     def speak_results_async(self, result):
         """
@@ -471,25 +534,25 @@ class AdvancedBioenergyApp:
         scan_controls = tk.Frame(self.detection_frame, bg="white")
         scan_controls.pack(fill=tk.X, pady=(0, 10))
 
-        btn_capture = self.create_button(
+        self.capture_button = self.create_button(
             scan_controls,
-            text="Capture & Analyze",
+            text=get_capture_button_text(self.media_state),
             font=ui_font(11, "bold"),
-            command=self.capture_and_analyze,
+            command=self.handle_capture_button,
             variant="orange",
             height=2,
         )
-        btn_capture.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        self.capture_button.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
 
-        btn_upload = self.create_button(
+        self.upload_button = self.create_button(
             scan_controls,
-            text="Upload & Analyze",
+            text=get_upload_button_text(self.media_state),
             font=ui_font(11, "bold"),
             command=self.upload_file_analyze,
             variant="green",
             height=2,
         )
-        btn_upload.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
+        self.upload_button.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
 
         summary_frame = tk.Frame(self.detection_frame, bg="white")
         summary_frame.pack(fill=tk.X, pady=(0, 8))
@@ -680,6 +743,23 @@ class AdvancedBioenergyApp:
         if str(button.cget("state")) != tk.DISABLED:
             button.config(bg=button.default_bg, fg=button.default_fg)
 
+    def sync_media_buttons(self):
+        self.capture_button.config(text=get_capture_button_text(self.media_state))
+        self.upload_button.config(text=get_upload_button_text(self.media_state))
+
+    def reset_detection_results(self):
+        self.last_analysis_result = None
+        self.lbl_confidence.config(text="--")
+        self.lbl_co2e.config(text="--")
+        self.lbl_features.config(text="--")
+        self.lbl_type.config(text="--")
+        self.lbl_condition.config(text="--")
+        self.lbl_weight.config(text="--")
+        self.lbl_biogas.config(text="--")
+        self.lbl_revenue.config(text="--")
+        self.apply_button.config(state=tk.DISABLED, bg=self.apply_button.default_bg)
+        self.image_status_label.config(text="Required JPG/PNG evidence for AI analysis")
+
     def create_metric(self, parent, label, value, row, column):
         card = tk.Frame(parent, bg="white", highlightbackground="#e5e7eb", highlightthickness=1)
         card.grid(row=row, column=column, sticky="ew", padx=5, pady=4)
@@ -727,6 +807,7 @@ class AdvancedBioenergyApp:
 
     def process_and_ml_predict(self, image):
         """Core CV engine: extract features, update AI cards, and enable report autofill."""
+        self.stop_audio_feedback()
         result = analyze_manure_image(image, self.ml_model)
         self.last_analysis_result = result
 
@@ -750,13 +831,10 @@ class AdvancedBioenergyApp:
 
         self.speak_results_async(result)
 
-        # 在界面展示带有分析标记的静态处理结果
-        self.is_camera_running = False # 暂停摄像头实时刷新，冻结画面查看结果
-        rgb_img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        img_to_show = Image.fromarray(rgb_img)
-        imgtk = ImageTk.PhotoImage(image=img_to_show)
-        self.video_label.config(image=imgtk)
-        self.video_label.image = imgtk
+        self.media_state = "analyzed_image"
+        self.sync_media_buttons()
+        self.stop_camera_stream(release=False)
+        self.show_processed_image(image)
 
     def apply_detection_to_report(self):
         if not self.last_analysis_result:
@@ -776,18 +854,37 @@ class AdvancedBioenergyApp:
     def submit_report_preview(self):
         self.submit_status_label.config(text=get_submit_feedback_text())
 
+    def handle_capture_button(self):
+        if self.media_state == "analyzed_image":
+            self.retake_image()
+        else:
+            self.capture_and_analyze()
+
     def capture_and_analyze(self):
-        """Photo and button action"""
+        """Analyze the current live camera frame."""
         if self.current_frame is not None:
             # copy current images to making ML analysis(复制当前画面进行机器学习分析)
             frame_to_analyze = self.current_frame.copy()
             self.process_and_ml_predict(frame_to_analyze)
+            self.media_state = get_next_media_state("camera_preview", "capture_image")
+            self.sync_media_buttons()
         else:
             messagebox.showwarning("Warning: No camera footage detected.")
 
+    def retake_image(self):
+        self.stop_audio_feedback()
+        self.media_state = get_next_media_state(self.media_state, "retake_image")
+        self.sync_media_buttons()
+        self.reset_detection_results()
+        self.reopen_camera_stream()
+
     def upload_file_analyze(self):
         """Restore camera or upload local file"""
-        self.is_camera_running = False
+        self.stop_audio_feedback()
+        if should_close_camera_for_upload():
+            self.stop_camera_stream(release=True)
+        else:
+            self.stop_camera_stream(release=False)
         file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg *.jpeg *.png")])
         if file_path:
             img = cv2.imread(file_path)
@@ -798,6 +895,8 @@ class AdvancedBioenergyApp:
             self.current_frame = img_resized.copy()
             self.show_processed_image(img_resized)
             self.process_and_ml_predict(img_resized)
+            self.media_state = get_next_media_state(self.media_state, "upload_image")
+            self.sync_media_buttons()
 
     def show_processed_image(self, image):
         rgb_img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)

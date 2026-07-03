@@ -30,6 +30,9 @@ This repository represents the **Deep Learning Detection** upgrade only.
 - Report-first workflow with AI detection opened from the form
 - Apply AI detection information back into the Report Waste form
 - Uploaded images display and analyze directly without switching back to the camera feed
+- After capture/upload analysis, the capture button becomes **Retake Image**
+- Retake clears the analyzed image, pauses audio, and reopens the camera
+- Uploading a new image re-analyzes and replaces the previous uploaded image
 - Scrollable interface for smaller windows
 - Inline submitted status text for the prototype form
 - Voice/audio feedback after analysis
