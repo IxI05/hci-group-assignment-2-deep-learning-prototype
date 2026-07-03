@@ -1,63 +1,36 @@
 # Farm2Energy HCI Assignment 2: Deep Learning Detection
 
-This repository contains one prototype feature for the Farm2Energy HCI Group Assignment 2 project.
+This repository contains the coded prototype feature for the Farm2Energy HCI Group Assignment 2 project.
 
-The feature implemented here is **Deep Learning Detection**, focused on detecting manure from a camera feed or uploaded image and estimating useful output values for the Farm2Energy concept.
+The implemented feature is **Deep Learning Detection**. It is not the full Farm2Energy application. It demonstrates the report waste flow where a farmer can use AI image detection to estimate manure quantity and apply the detected information back into the Report Waste interface.
 
-This is not the full Farm2Energy application. It is the coded prototype feature for the assignment requirement to develop one working feature, upload it to GitHub, and include the GitHub link/code evidence in the report.
+## Feature Scope
 
-## Assignment Context
-
-Farm2Energy is an HCI project concept that supports livestock waste reporting, collection, energy estimation, rewards, and sustainability tracking.
-
-For Assignment 2, the proposed system upgrades include:
-
-- Deep Learning Detection
-- Quantum Route Optimization
-- AR/XR Energy Visualization
-
-This repository represents the **Deep Learning Detection** upgrade only.
-
-## Features
-
-- Live camera preview
-- Local image upload
-- Brown pixel segmentation with contour detection
-- Linear regression prediction for waste weight
-- Biogas and revenue estimates
-- Confidence rate, CO2e reduction, manure type, and manure condition output
-- Report Waste interface for entering estimated quantity, location, and notes
-- Report-first workflow with AI detection opened from the form
-- Apply AI detection information back into the Report Waste form
-- Uploaded images display and analyze directly without switching back to the camera feed
-- After capture/upload analysis, the capture button becomes **Retake Image**
-- Retake clears the analyzed image, pauses audio, and reopens the camera
-- Uploading a new image re-analyzes and replaces the previous uploaded image
+- Report Waste interface for waste type, estimated quantity, farm location, and condition notes
+- AI detection screen opened from the report form
+- Camera capture or local JPG/PNG upload for image analysis
+- Manure segmentation using OpenCV color detection
+- Simple machine learning estimate for manure mass
+- Detection result fields:
+  - manure type
+  - manure condition
+  - confidence rate
+  - mass estimate
+  - biogas estimate
+  - CO2e reduction estimate
+  - estimated return
+- Apply Information button to fill the Report Waste form automatically
+- Retake Image flow that clears the analyzed image, pauses audio, and reopens the camera
 - Scrollable interface for smaller windows
-- Inline submitted status text for the prototype form
-- Voice/audio feedback after analysis
-
-## Prototype Purpose
-
-The prototype demonstrates how a farmer could use camera-based detection to analyze manure and receive estimated values such as:
-
-- Detected waste density
-- Estimated manure weight
-- Estimated biogas production
-- Estimated CO2e reduction
-- Estimated financial return
-
-The prototype starts on the **Report Waste** interface. From there, the user clicks **Use AI Detection** to open the detection screen. After analysis is completed, the **Apply Information to Report Waste** button automatically fills the report form with the detected manure type, quantity, and condition notes.
-
-The app starts maximized when possible. If the window is resized smaller, the interface can be scrolled so the lower controls remain accessible.
+- macOS and Windows launcher files
 
 ## Requirements
 
 - Python 3.10 or later
-- A working camera for live capture
 - Python packages listed in `requirements.txt`
+- Camera access for live capture
 
-Tkinter is included with most Python installs. If the camera is unavailable, the prototype can still analyze uploaded JPG/PNG images.
+If a camera is not available, the prototype can still analyze uploaded JPG/PNG images.
 
 ## Install Dependencies
 
@@ -73,30 +46,36 @@ Windows:
 py -3 -m pip install -r requirements.txt
 ```
 
-## Run
+## Run on macOS
 
-macOS, double-click:
+Double-click:
 
 ```sh
 run_app.command
 ```
 
-Windows, double-click:
-
-```bat
-run_app.bat
-```
-
-Or run manually from the project folder.
-
-macOS:
+Or run manually:
 
 ```sh
 python3 "HCI-images-deep learning/test_2.py"
 ```
 
-Windows:
+## Run on Windows
+
+Double-click:
+
+```bat
+run_app.bat
+```
+
+Or run manually:
 
 ```bat
 py -3 "HCI-images-deep learning\test_2.py"
 ```
+
+## Notes
+
+- The Submit Report button only shows a prototype submitted status. It does not send data to a real system.
+- The feature starts on the Report Waste form. Click **Use AI Detection** to open the image detection interface.
+- After analysis, click **Apply Information to Report Waste** to copy the AI result back into the form.
