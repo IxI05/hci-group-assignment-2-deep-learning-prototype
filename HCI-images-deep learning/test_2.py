@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 import cv2
 from PIL import Image, ImageTk
 import numpy as np
@@ -12,6 +12,98 @@ import sys
 from sklearn.linear_model import LinearRegression
 # --- Introducing Voice dataset (Text-to-Speech)
 import pyttsx3 
+
+
+GREEN_DARK = "#1f5120"
+GREEN = "#2e7d32"
+GREEN_SOFT = "#edf8f0"
+GREEN_LINE = "#a6e9bd"
+ORANGE = "#e65100"
+BG = "#f4f6f1"
+TEXT = "#202124"
+MUTED = "#6b7280"
+
+
+def build_machine_learning_model():
+    """
+    Machine Learning Section: simulation learning from a historical dataset.
+    Features: [percentage of dark manure pixels, number of manure segments].
+    Label: estimated manure weight in kg.
+    """
+    x_train = np.array([
+        [5.0, 1],
+        [12.0, 1],
+        [15.0, 5],
+        [25.0, 8],
+        [2.0, 3],
+        [8.0, 6],
+    ])
+    y_train = np.array([2.0, 4.5, 15.0, 30.0, 6.0, 18.0])
+
+    model = LinearRegression()
+    model.fit(x_train, y_train)
+    return model
+
+
+def analyze_manure_image(image, model):
+    """Extract CV features and return the full Deep Learning Detection result."""
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    lower_brown = np.array([10, 20, 20])
+    upper_brown = np.array([30, 255, 120])
+    mask = cv2.inRange(hsv, lower_brown, upper_brown)
+    waste_ratio = float((np.sum(mask > 0) / mask.size) * 100)
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    valid_contours = [c for c in contours if cv2.contourArea(c) > 100]
+    object_count = len(valid_contours)
+
+    input_data = np.array([[waste_ratio, object_count]])
+    predicted_weight = max(0.0, float(model.predict(input_data)[0]))
+
+    predicted_biogas = predicted_weight * 0.12
+    estimated_revenue = predicted_biogas * 0.55
+    co2e_reduction = predicted_weight * 0.39
+
+    if object_count == 0 or waste_ratio < 0.5:
+        confidence_rate = 45
+        condition = "Needs review"
+    else:
+        confidence_rate = int(min(98, 62 + (min(waste_ratio, 18.0) * 1.4) + min(object_count, 5) * 4))
+        if waste_ratio >= 12:
+            condition = "Good"
+        elif waste_ratio >= 4:
+            condition = "Moderate"
+        else:
+            condition = "Wet / fresh"
+
+    return {
+        "waste_ratio": round(waste_ratio, 1),
+        "object_count": object_count,
+        "weight_kg": round(predicted_weight, 1),
+        "biogas_m3": round(predicted_biogas, 1),
+        "estimated_return_rm": round(estimated_revenue, 2),
+        "confidence_rate": confidence_rate,
+        "co2e_reduction_kg": round(co2e_reduction, 1),
+        "manure_type": "Cow manure",
+        "condition": condition,
+        "contours": valid_contours,
+    }
+
+
+def format_report_values(result):
+    """Prepare detection values for the Report Waste form."""
+    notes = (
+        f"Condition: {result['condition']}\n"
+        f"Confidence: {result['confidence_rate']}%\n"
+        f"Biogas estimate: {result['biogas_m3']} m3\n"
+        f"CO2e reduction: {result['co2e_reduction_kg']} kg\n"
+        f"Estimated return: RM {result['estimated_return_rm']:.2f}"
+    )
+    return {
+        "waste_type": result["manure_type"],
+        "estimated_quantity": f"{result['weight_kg']:.1f} kg",
+        "condition_notes": notes,
+    }
 
 
 def play_alert_sound(frequency=1800, duration_ms=250, platform_name=None, runner=None):
@@ -41,8 +133,9 @@ class AdvancedBioenergyApp:
     def __init__(self, window):
         self.window = window
         self.window.title("Farm2Energy")
-        self.window.geometry("1000x700")
-        self.window.configure(bg="#f4f6f9")
+        self.window.geometry("1120x780")
+        self.window.minsize(1040, 720)
+        self.window.configure(bg=BG)
 
         # Initialize the AI ​​voice engine
     
@@ -55,6 +148,7 @@ class AdvancedBioenergyApp:
         self.current_frame = None
         self.is_camera_running = True
         self.audio_lock = threading.Lock()
+        self.last_analysis_result = None
 
         # 3. Create UI Interface (创建 UI 界面)
         self.create_widgets()
@@ -63,7 +157,7 @@ class AdvancedBioenergyApp:
         self.video_thread = threading.Thread(target=self.video_stream_loop, daemon=True)
         self.video_thread.start()
 
-    def speak_results_async(self, weight, biogas):
+    def speak_results_async(self, result):
         """
         Audio API Technique: 
         Plays the completion chime and spoken report in one ordered background
@@ -71,8 +165,10 @@ class AdvancedBioenergyApp:
         """
         text = (
             "Analysis complete. "
-            f"The machine learning model predicts a total waste weight of {weight:.1f} kilograms. "
-            f"The estimated bio gas production potential is {biogas:.1f} cubic meters."
+            f"The model confidence is {result['confidence_rate']} percent. "
+            f"The detected manure type is {result['manure_type']} with {result['condition']} condition. "
+            f"The estimated mass is {result['weight_kg']:.1f} kilograms. "
+            f"The estimated bio gas production potential is {result['biogas_m3']:.1f} cubic meters."
         )
 
         def speak():
@@ -124,68 +220,198 @@ class AdvancedBioenergyApp:
         Label Y includes: [Actual weight of collected feces (kg)]
         """
         print("[ML Base] Loading manure dataset and training ML model...")
-        
-        # Simulated historical dataset: (Percentage, Number of unique samples) -> Actual weight
-        # 模拟历史数据集：(占比, 独立数量) -> 真实重量
-        # Even if the proportion is large (due to proximity), if the quantity is small, the actual weight will be light.
-        #解决近大远小的问题（Impotant!!!）
-        X_train = np.array([
-            [5.0,  1],   # 离得近，只有1堆 -> 2.0kg
-            [12.0, 1],   # 极近，只有1堆 -> 4.5kg
-            [15.0, 5],   # 正常距离，5堆 -> 15.0kg
-            [25.0, 8],   # 满地都是，8堆 -> 30.0kg
-            [2.0,  3],   # 离得远，虽小但有3堆 -> 6.0kg (纠正近大远小)
-            [8.0,  6],   # 较远，有6堆 -> 18.0kg
-        ])
-        Y_train = np.array([2.0, 4.5, 15.0, 30.0, 6.0, 18.0])
-
-        # Initialize and train a linear regression machine learning model
-        self.ml_model = LinearRegression()
-        self.ml_model.fit(X_train, Y_train)
+        self.ml_model = build_machine_learning_model()
         print("[ML Base] Machine learning model trained successfully!")
 
     def create_widgets(self):
-        # Top header
-        header = tk.Label(self.window, text="Farm2Energy", 
-                          font=("Microsoft YaHei", 15, "bold"), bg="#1b5e20", fg="white", pady=10)
+        header = tk.Label(
+            self.window,
+            text="Farm2Energy - Report Waste / Deep Learning Detection",
+            font=("Microsoft YaHei", 16, "bold"),
+            bg=GREEN_DARK,
+            fg="white",
+            pady=12,
+        )
         header.pack(fill=tk.X)
 
-        main_frame = tk.Frame(self.window, bg="#f4f6f9")
+        main_frame = tk.Frame(self.window, bg=BG)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
 
-        # Left column: Camera/Image Preview (左栏：摄像头/图像预览)
-        left_frame = tk.LabelFrame(main_frame, text=" Real-time image acquisition (Visual API) ", font=("Microsoft YaHei", 10, "bold"), bg="white")
-        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+        detection_frame = tk.LabelFrame(
+            main_frame,
+            text=" Deep Learning Detection ",
+            font=("Microsoft YaHei", 11, "bold"),
+            bg="white",
+            fg=TEXT,
+            padx=12,
+            pady=10,
+        )
+        detection_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
 
-        self.video_label = tk.Label(left_frame, bg="#000000")
-        self.video_label.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.video_label = tk.Label(detection_frame, bg="#000000")
+        self.video_label.pack(fill=tk.BOTH, expand=True, padx=2, pady=(0, 8))
 
-        # Right column: Control and ML Prediction Report(右栏：控制与 ML 预测报告)
-        right_frame = tk.Frame(main_frame, bg="#f4f6f9", width=380)
-        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=5)
+        scan_controls = tk.Frame(detection_frame, bg="white")
+        scan_controls.pack(fill=tk.X, pady=(0, 10))
 
-        # Control Button
-        btn_capture = tk.Button(right_frame, text="📸 Take photos and analyze", font=("Microsoft YaHei", 11, "bold"), bg="#e65100", fg="white", command=self.capture_and_analyze, height=2)
-        btn_capture.pack(fill=tk.X, pady=5)
+        btn_capture = tk.Button(
+            scan_controls,
+            text="Capture & Analyze",
+            font=("Microsoft YaHei", 11, "bold"),
+            bg=ORANGE,
+            fg="white",
+            command=self.capture_and_analyze,
+            height=2,
+        )
+        btn_capture.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
 
-        btn_upload = tk.Button(right_frame, text="📁 Upload local file", font=("Microsoft YaHei", 11), bg="#2e7d32", fg="white", command=self.upload_file_analyze)
-        btn_upload.pack(fill=tk.X, pady=5)
+        btn_upload = tk.Button(
+            scan_controls,
+            text="Upload & Analyze",
+            font=("Microsoft YaHei", 11, "bold"),
+            bg=GREEN,
+            fg="white",
+            command=self.upload_file_analyze,
+            height=2,
+        )
+        btn_upload.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
 
-        # ML Predictive Output
-        self.report_frame = tk.LabelFrame(right_frame, text="ML Model Prediction ", font=("Microsoft YaHei", 10, "bold"), bg="white", padx=10, pady=10)
-        self.report_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        summary_frame = tk.Frame(detection_frame, bg="white")
+        summary_frame.pack(fill=tk.X, pady=(0, 8))
 
-        self.lbl_features = tk.Label(self.report_frame, text="Feature extraction (percentage | number): --", font=("Microsoft YaHei", 10), bg="white", anchor="w")
-        self.lbl_features.pack(fill=tk.X, pady=5)
+        self.lbl_confidence = self.create_metric(summary_frame, "Confidence", "--", 0, 0)
+        self.lbl_co2e = self.create_metric(summary_frame, "CO2e reduction", "--", 0, 1)
 
-        self.lbl_weight = tk.Label(self.report_frame, text="ML Predicting total fecal weight: -- kg", font=("Microsoft YaHei", 12, "bold"), fg="#1b5e20", bg="white", anchor="w")
-        self.lbl_weight.pack(fill=tk.X, pady=10)
+        result_frame = tk.LabelFrame(
+            detection_frame,
+            text=" Deep learning result - Model v2.1 image analysis ",
+            font=("Microsoft YaHei", 10, "bold"),
+            bg="white",
+            fg=TEXT,
+            padx=10,
+            pady=8,
+        )
+        result_frame.pack(fill=tk.X, pady=(0, 10))
 
-        self.lbl_biogas = tk.Label(self.report_frame, text="Expected biogas production: -- m³", font=("Microsoft YaHei", 11), bg="white", anchor="w")
-        self.lbl_biogas.pack(fill=tk.X, pady=5)
+        self.lbl_features = self.create_result_tile(result_frame, "Features", "--", 0, 0)
+        self.lbl_type = self.create_result_tile(result_frame, "Manure type", "--", 0, 1)
+        self.lbl_condition = self.create_result_tile(result_frame, "Condition", "--", 1, 0)
+        self.lbl_weight = self.create_result_tile(result_frame, "Mass estimate", "--", 1, 1)
+        self.lbl_biogas = self.create_result_tile(result_frame, "Biogas", "--", 2, 0)
+        self.lbl_revenue = self.create_result_tile(result_frame, "Estimated return", "--", 2, 1)
 
-        self.lbl_revenue = tk.Label(self.report_frame, text="Estimated Farmer Profits: -- RM", font=("Microsoft YaHei", 11), bg="white", anchor="w")
-        self.lbl_revenue.pack(fill=tk.X, pady=5)
+        self.apply_button = tk.Button(
+            detection_frame,
+            text="Use AI Detection Information",
+            font=("Microsoft YaHei", 11, "bold"),
+            bg="white",
+            fg=GREEN_DARK,
+            disabledforeground="#9ca3af",
+            relief=tk.GROOVE,
+            bd=2,
+            command=self.apply_detection_to_report,
+            state=tk.DISABLED,
+            height=2,
+        )
+        self.apply_button.pack(fill=tk.X, pady=(0, 2))
+
+        report_frame = tk.LabelFrame(
+            main_frame,
+            text=" Report Waste Interface ",
+            font=("Microsoft YaHei", 11, "bold"),
+            bg="white",
+            fg=TEXT,
+            padx=14,
+            pady=12,
+            width=390,
+        )
+        report_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(8, 0))
+        report_frame.pack_propagate(False)
+
+        image_card = tk.Frame(report_frame, bg=GREEN_SOFT, highlightbackground=GREEN_LINE, highlightthickness=1)
+        image_card.pack(fill=tk.X, pady=(0, 14))
+        tk.Label(
+            image_card,
+            text="MANURE IMAGE",
+            font=("Microsoft YaHei", 10, "bold"),
+            bg=GREEN_SOFT,
+            fg=TEXT,
+            anchor="w",
+        ).pack(fill=tk.X, padx=12, pady=(10, 0))
+        self.image_status_label = tk.Label(
+            image_card,
+            text="Required JPG/PNG evidence for AI analysis",
+            font=("Microsoft YaHei", 9),
+            bg=GREEN_SOFT,
+            fg=MUTED,
+            anchor="w",
+        )
+        self.image_status_label.pack(fill=tk.X, padx=12, pady=(0, 10))
+
+        self.waste_type_var = tk.StringVar(value="Cow manure")
+        self.quantity_var = tk.StringVar()
+        self.location_var = tk.StringVar(value="Klang, Selangor")
+
+        self.add_field_label(report_frame, "WASTE TYPE")
+        self.waste_type_combo = ttk.Combobox(
+            report_frame,
+            textvariable=self.waste_type_var,
+            values=("Cow manure", "Goat manure", "Chicken manure", "Mixed manure"),
+            state="readonly",
+            font=("Microsoft YaHei", 11),
+        )
+        self.waste_type_combo.pack(fill=tk.X, ipady=6, pady=(0, 12))
+
+        self.add_field_label(report_frame, "ESTIMATED QUANTITY")
+        self.quantity_entry = tk.Entry(report_frame, textvariable=self.quantity_var, font=("Microsoft YaHei", 12), relief=tk.GROOVE, bd=2)
+        self.quantity_entry.pack(fill=tk.X, ipady=9, pady=(0, 12))
+
+        self.add_field_label(report_frame, "FARM LOCATION")
+        self.location_entry = tk.Entry(report_frame, textvariable=self.location_var, font=("Microsoft YaHei", 12), relief=tk.GROOVE, bd=2)
+        self.location_entry.pack(fill=tk.X, ipady=9, pady=(0, 12))
+
+        self.add_field_label(report_frame, "CONDITION NOTES")
+        self.condition_text = tk.Text(report_frame, height=7, font=("Microsoft YaHei", 11), wrap=tk.WORD, relief=tk.GROOVE, bd=2)
+        self.condition_text.insert("1.0", "Stored under covered area. Access through east gate.")
+        self.condition_text.pack(fill=tk.BOTH, expand=True, pady=(0, 14))
+
+        tk.Button(
+            report_frame,
+            text="Submit Report",
+            font=("Microsoft YaHei", 12, "bold"),
+            bg=GREEN_DARK,
+            fg="white",
+            command=self.submit_report_preview,
+            height=2,
+        ).pack(fill=tk.X, pady=(0, 4))
+
+    def create_metric(self, parent, label, value, row, column):
+        card = tk.Frame(parent, bg="white", highlightbackground="#e5e7eb", highlightthickness=1)
+        card.grid(row=row, column=column, sticky="ew", padx=5, pady=4)
+        parent.grid_columnconfigure(column, weight=1)
+        value_label = tk.Label(card, text=value, font=("Microsoft YaHei", 18, "bold"), bg="white", fg=TEXT)
+        value_label.pack(anchor="w", padx=14, pady=(8, 0))
+        tk.Label(card, text=label, font=("Microsoft YaHei", 10), bg="white", fg=MUTED).pack(anchor="w", padx=14, pady=(0, 8))
+        return value_label
+
+    def create_result_tile(self, parent, title, value, row, column):
+        tile = tk.Frame(parent, bg=GREEN_SOFT)
+        tile.grid(row=row, column=column, sticky="ew", padx=5, pady=5)
+        parent.grid_columnconfigure(column, weight=1)
+        tk.Label(tile, text=title.upper(), font=("Microsoft YaHei", 9, "bold"), bg=GREEN_SOFT, fg=MUTED).pack(anchor="w", padx=12, pady=(8, 0))
+        value_label = tk.Label(tile, text=value, font=("Microsoft YaHei", 12, "bold"), bg=GREEN_SOFT, fg=TEXT)
+        value_label.pack(anchor="w", padx=12, pady=(0, 8))
+        return value_label
+
+    def add_field_label(self, parent, text):
+        tk.Label(
+            parent,
+            text=text,
+            font=("Microsoft YaHei", 9, "bold"),
+            bg="white",
+            fg="#666666",
+            anchor="w",
+        ).pack(fill=tk.X, pady=(0, 4))
 
     def video_stream_loop(self):
         """Projecting camera feed onto the Tkinter interface in real time"""
@@ -202,48 +428,29 @@ class AdvancedBioenergyApp:
             time.sleep(0.03)
 
     def process_and_ml_predict(self, image):
-        """核心处理：使用计算机视觉提取特征，并用真实的机器学习模型进行预测"""
-        #Core CV Engine: extracts pixel contours, executes ML prediction, and fires iterative Audio speech"""
-        # 1. Feature Extraction A: Pixel density filtering
-        # 1. 提取特征 A: 粪便颜色占比
-        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        lower_brown = np.array([10, 20, 20])
-        upper_brown = np.array([30, 255, 100])
-        mask = cv2.inRange(hsv, lower_brown, upper_brown)
-        waste_ratio = float((np.sum(mask > 0) / mask.size) * 100)
+        """Core CV engine: extract features, update AI cards, and enable report autofill."""
+        result = analyze_manure_image(image, self.ml_model)
+        self.last_analysis_result = result
 
-        # 2. 提取特征 B: 识别独立的粪便数量 (以此对抗近大远小问题)
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        # 过滤掉太小的轮廓
-        valid_contours = [c for c in contours if cv2.contourArea(c) > 100]
-        object_count = len(valid_contours)
+        cv2.drawContours(image, result["contours"], -1, (80, 190, 70), 2)
+        for contour in result["contours"]:
+            x, y, w, h = cv2.boundingRect(contour)
+            cv2.rectangle(image, (x, y), (x + w, y + h), (125, 210, 90), 2)
+        cv2.putText(image, "Scanning", (20, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (230, 255, 230), 2)
+        cv2.putText(image, f"{result['confidence_rate']}%", (410, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (230, 255, 230), 2)
 
-        # 如果什么都没检测到，给个保底数据
-        if object_count == 0 and waste_ratio < 0.5:
-            object_count = 0
+        self.lbl_confidence.config(text=f"{result['confidence_rate']}%")
+        self.lbl_co2e.config(text=f"{result['co2e_reduction_kg']:.1f} kg")
+        self.lbl_features.config(text=f"{result['waste_ratio']:.1f}% | {result['object_count']} units")
+        self.lbl_type.config(text=result["manure_type"])
+        self.lbl_condition.config(text=result["condition"])
+        self.lbl_weight.config(text=f"{result['weight_kg']:.1f} kg")
+        self.lbl_biogas.config(text=f"{result['biogas_m3']:.1f} m3")
+        self.lbl_revenue.config(text=f"RM {result['estimated_return_rm']:.2f}")
+        self.apply_button.config(state=tk.NORMAL, bg=GREEN_SOFT)
+        self.image_status_label.config(text=f"Ready - AI analysis confidence {result['confidence_rate']}%")
 
-        # 3. 🎨 视觉 API 叠加反馈：在画面上把检测到的轮廓和数量画出来
-        cv2.drawContours(image, valid_contours, -1, (0, 255, 0), 2)
-        cv2.putText(image, f"Detected Blocks: {object_count}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-
-        # 4. 🤖 ML Model predict
-        # 把当前提取到的特征组合成二维数组 [[占比, 数量]] 喂给模型
-        input_data = np.array([[waste_ratio, object_count]])
-        predicted_weight = self.ml_model.predict(input_data)[0]
-        predicted_weight = max(0.0, float(predicted_weight)) # 避免负数
-
-        # 5. 计算衍生能效数据
-        predicted_biogas = predicted_weight * 0.04
-        estimated_revenue = predicted_biogas * 0.55
-        
-        # Call the asynchronous AI voice broadcast API 
-        self.speak_results_async(predicted_weight, predicted_biogas)
-
-        # 7. Update UI Oupcome(更新 UI 结果)
-        self.lbl_features.config(text=f"Features: Density {waste_ratio:.1f}% | Segmented Units {object_count}")
-        self.lbl_weight.config(text=f"ML Predicted Weight: {predicted_weight:.2f} kg")
-        self.lbl_biogas.config(text=f"Predicted Biogas Yield: {predicted_biogas:.2f} m³")
-        self.lbl_revenue.config(text=f"Estimated Financial Return: RM {estimated_revenue:.2f}")
+        self.speak_results_async(result)
 
         # 在界面展示带有分析标记的静态处理结果
         self.is_camera_running = False # 暂停摄像头实时刷新，冻结画面查看结果
@@ -252,6 +459,24 @@ class AdvancedBioenergyApp:
         imgtk = ImageTk.PhotoImage(image=img_to_show)
         self.video_label.config(image=imgtk)
         self.video_label.image = imgtk
+
+    def apply_detection_to_report(self):
+        if not self.last_analysis_result:
+            messagebox.showwarning("No analysis", "Please complete AI detection before applying information.")
+            return
+
+        report_values = format_report_values(self.last_analysis_result)
+        self.waste_type_var.set(report_values["waste_type"])
+        self.quantity_var.set(report_values["estimated_quantity"])
+        self.condition_text.delete("1.0", tk.END)
+        self.condition_text.insert("1.0", report_values["condition_notes"])
+        messagebox.showinfo("Applied", "AI detection information has been applied to the Report Waste form.")
+
+    def submit_report_preview(self):
+        messagebox.showinfo(
+            "Prototype only",
+            "This HCI prototype shows the Report Waste interface only. No report is sent to a real system.",
+        )
 
     def capture_and_analyze(self):
         """Photo and button action"""
@@ -268,6 +493,9 @@ class AdvancedBioenergyApp:
         file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg *.jpeg *.png")])
         if file_path:
             img = cv2.imread(file_path)
+            if img is None:
+                messagebox.showerror("Image error", "The selected image could not be opened.")
+                return
             img_resized = cv2.resize(img, (500, 380))
             self.process_and_ml_predict(img_resized)
 
