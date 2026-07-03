@@ -35,3 +35,7 @@ def test_buttons_highlight_when_clicked_or_hovered():
         assert palette["hoverbackground"] != "white"
         assert palette["activeforeground"] == "black"
         assert palette["hoverforeground"] == "black"
+
+
+def test_action_buttons_use_custom_label_widget_for_visible_mac_hover():
+    assert farm2energy_app.get_button_widget_type() == "label"

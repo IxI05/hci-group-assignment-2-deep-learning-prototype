@@ -92,6 +92,10 @@ def get_button_palette(variant):
     return palettes.get(variant, palettes["outline"]).copy()
 
 
+def get_button_widget_type():
+    return "label"
+
+
 def get_camera_backend(platform_name=None):
     """Use DirectShow on Windows to make OpenCV camera startup more reliable."""
     current_platform = platform_name or sys.platform
@@ -717,26 +721,30 @@ class AdvancedBioenergyApp:
 
     def create_button(self, parent, text, font, command, variant="outline", **kwargs):
         palette = get_button_palette(variant)
-        button = tk.Button(
+        button = tk.Label(
             parent,
             text=text,
             font=font,
-            command=command,
             bg=palette["bg"],
             fg=palette["fg"],
-            activebackground=palette["activebackground"],
-            activeforeground=palette["activeforeground"],
             relief=tk.GROOVE,
             bd=2,
             cursor="hand2",
+            padx=10,
+            pady=6,
             **kwargs,
         )
+        button.command = command
         button.default_bg = palette["bg"]
         button.default_fg = palette["fg"]
         button.hover_bg = palette["hoverbackground"]
         button.hover_fg = palette["hoverforeground"]
+        button.active_bg = palette["activebackground"]
+        button.active_fg = palette["activeforeground"]
         button.bind("<Enter>", self.on_button_enter)
         button.bind("<Leave>", self.on_button_leave)
+        button.bind("<ButtonPress-1>", self.on_button_press)
+        button.bind("<ButtonRelease-1>", self.on_button_release)
         return button
 
     def on_button_enter(self, event):
@@ -748,6 +756,18 @@ class AdvancedBioenergyApp:
         button = event.widget
         if str(button.cget("state")) != tk.DISABLED:
             button.config(bg=button.default_bg, fg=button.default_fg)
+
+    def on_button_press(self, event):
+        button = event.widget
+        if str(button.cget("state")) != tk.DISABLED:
+            button.config(bg=button.active_bg, fg=button.active_fg)
+
+    def on_button_release(self, event):
+        button = event.widget
+        if str(button.cget("state")) == tk.DISABLED:
+            return
+        button.config(bg=button.hover_bg, fg=button.hover_fg)
+        button.command()
 
     def sync_media_buttons(self):
         self.capture_button.config(text=get_capture_button_text(self.media_state))
