@@ -22,6 +22,14 @@ ORANGE = "#e65100"
 BG = "#f4f6f1"
 TEXT = "#202124"
 MUTED = "#6b7280"
+ORANGE_HOVER = "#f57c00"
+ORANGE_ACTIVE = "#bf4300"
+GREEN_HOVER = "#43a047"
+GREEN_ACTIVE = "#1b5e20"
+GREEN_DARK_HOVER = "#2f6b2a"
+GREEN_DARK_ACTIVE = "#163f18"
+OUTLINE_HOVER = "#e1f3e6"
+OUTLINE_ACTIVE = "#ccebd5"
 
 
 def get_ui_font_family(platform_name=None):
@@ -38,6 +46,44 @@ def ui_font(size, weight=None):
     if weight:
         return (get_ui_font_family(), size, weight)
     return (get_ui_font_family(), size)
+
+
+def get_button_palette(variant):
+    palettes = {
+        "primary": {
+            "bg": GREEN_DARK,
+            "fg": "white",
+            "activebackground": GREEN_DARK_ACTIVE,
+            "activeforeground": "white",
+            "hoverbackground": GREEN_DARK_HOVER,
+            "hoverforeground": "white",
+        },
+        "orange": {
+            "bg": ORANGE,
+            "fg": "white",
+            "activebackground": ORANGE_ACTIVE,
+            "activeforeground": "white",
+            "hoverbackground": ORANGE_HOVER,
+            "hoverforeground": "white",
+        },
+        "green": {
+            "bg": GREEN,
+            "fg": "white",
+            "activebackground": GREEN_ACTIVE,
+            "activeforeground": "white",
+            "hoverbackground": GREEN_HOVER,
+            "hoverforeground": "white",
+        },
+        "outline": {
+            "bg": "white",
+            "fg": GREEN_DARK,
+            "activebackground": OUTLINE_ACTIVE,
+            "activeforeground": GREEN_DARK,
+            "hoverbackground": OUTLINE_HOVER,
+            "hoverforeground": GREEN_DARK,
+        },
+    }
+    return palettes.get(variant, palettes["outline"]).copy()
 
 
 def get_camera_backend(platform_name=None):
@@ -403,15 +449,12 @@ class AdvancedBioenergyApp:
 
         detection_header = tk.Frame(self.detection_frame, bg="white")
         detection_header.pack(fill=tk.X, pady=(0, 8))
-        tk.Button(
+        self.create_button(
             detection_header,
             text="Back to Report Waste",
             font=ui_font(10, "bold"),
-            bg="white",
-            fg=GREEN_DARK,
             command=self.show_report_interface,
-            relief=tk.GROOVE,
-            bd=2,
+            variant="outline",
         ).pack(side=tk.LEFT)
         tk.Label(
             detection_header,
@@ -428,24 +471,22 @@ class AdvancedBioenergyApp:
         scan_controls = tk.Frame(self.detection_frame, bg="white")
         scan_controls.pack(fill=tk.X, pady=(0, 10))
 
-        btn_capture = tk.Button(
+        btn_capture = self.create_button(
             scan_controls,
             text="Capture & Analyze",
             font=ui_font(11, "bold"),
-            bg=ORANGE,
-            fg="white",
             command=self.capture_and_analyze,
+            variant="orange",
             height=2,
         )
         btn_capture.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
 
-        btn_upload = tk.Button(
+        btn_upload = self.create_button(
             scan_controls,
             text="Upload & Analyze",
             font=ui_font(11, "bold"),
-            bg=GREEN,
-            fg="white",
             command=self.upload_file_analyze,
+            variant="green",
             height=2,
         )
         btn_upload.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
@@ -474,16 +515,13 @@ class AdvancedBioenergyApp:
         self.lbl_biogas = self.create_result_tile(result_frame, "Biogas", "--", 2, 0)
         self.lbl_revenue = self.create_result_tile(result_frame, "Estimated return", "--", 2, 1)
 
-        self.apply_button = tk.Button(
+        self.apply_button = self.create_button(
             self.detection_frame,
             text="Apply Information to Report Waste",
             font=ui_font(11, "bold"),
-            bg="white",
-            fg=GREEN_DARK,
             disabledforeground="#9ca3af",
-            relief=tk.GROOVE,
-            bd=2,
             command=self.apply_detection_to_report,
+            variant="outline",
             state=tk.DISABLED,
             height=2,
         )
@@ -546,25 +584,21 @@ class AdvancedBioenergyApp:
         self.condition_text.insert("1.0", "Stored under covered area. Access through east gate.")
         self.condition_text.pack(fill=tk.BOTH, expand=True, pady=(0, 14))
 
-        tk.Button(
+        self.create_button(
             self.report_frame,
             text="Use AI Detection",
             font=ui_font(12, "bold"),
-            bg="white",
-            fg=GREEN_DARK,
             command=self.open_detection_interface,
-            relief=tk.GROOVE,
-            bd=2,
+            variant="outline",
             height=2,
         ).pack(fill=tk.X, pady=(0, 10))
 
-        tk.Button(
+        self.create_button(
             self.report_frame,
             text="Submit Report",
             font=ui_font(12, "bold"),
-            bg=GREEN_DARK,
-            fg="white",
             command=self.submit_report_preview,
+            variant="primary",
             height=2,
         ).pack(fill=tk.X, pady=(0, 4))
         self.submit_status_label = tk.Label(
@@ -611,6 +645,40 @@ class AdvancedBioenergyApp:
 
     def show_report_interface(self):
         self.show_screen(get_next_screen(self.active_screen, "back_to_report"))
+
+    def create_button(self, parent, text, font, command, variant="outline", **kwargs):
+        palette = get_button_palette(variant)
+        button = tk.Button(
+            parent,
+            text=text,
+            font=font,
+            command=command,
+            bg=palette["bg"],
+            fg=palette["fg"],
+            activebackground=palette["activebackground"],
+            activeforeground=palette["activeforeground"],
+            relief=tk.GROOVE,
+            bd=2,
+            cursor="hand2",
+            **kwargs,
+        )
+        button.default_bg = palette["bg"]
+        button.default_fg = palette["fg"]
+        button.hover_bg = palette["hoverbackground"]
+        button.hover_fg = palette["hoverforeground"]
+        button.bind("<Enter>", self.on_button_enter)
+        button.bind("<Leave>", self.on_button_leave)
+        return button
+
+    def on_button_enter(self, event):
+        button = event.widget
+        if str(button.cget("state")) != tk.DISABLED:
+            button.config(bg=button.hover_bg, fg=button.hover_fg)
+
+    def on_button_leave(self, event):
+        button = event.widget
+        if str(button.cget("state")) != tk.DISABLED:
+            button.config(bg=button.default_bg, fg=button.default_fg)
 
     def create_metric(self, parent, label, value, row, column):
         card = tk.Frame(parent, bg="white", highlightbackground="#e5e7eb", highlightthickness=1)
