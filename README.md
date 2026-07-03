@@ -27,7 +27,8 @@ This repository represents the **Deep Learning Detection** upgrade only.
 - Biogas and revenue estimates
 - Confidence rate, CO2e reduction, manure type, and manure condition output
 - Report Waste interface for entering estimated quantity, location, and notes
-- Apply AI detection information into the Report Waste form
+- Report-first workflow with AI detection opened from the form
+- Apply AI detection information back into the Report Waste form
 - Voice/audio feedback after analysis
 
 ## Prototype Purpose
@@ -40,7 +41,7 @@ The prototype demonstrates how a farmer could use camera-based detection to anal
 - Estimated CO2e reduction
 - Estimated financial return
 
-After analysis is completed, the **Use AI Detection Information** button can automatically fill the Report Waste interface with the detected manure type, quantity, and condition notes.
+The prototype starts on the **Report Waste** interface. From there, the user clicks **Use AI Detection** to open the detection screen. After analysis is completed, the **Apply Information to Report Waste** button automatically fills the report form with the detected manure type, quantity, and condition notes.
 
 ## Requirements
 

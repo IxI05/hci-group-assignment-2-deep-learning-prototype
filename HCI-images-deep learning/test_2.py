@@ -55,6 +55,19 @@ def open_camera_capture():
     return cv2.VideoCapture(0, backend)
 
 
+def get_initial_screen():
+    return "report_waste"
+
+
+def get_next_screen(current_screen, action):
+    transitions = {
+        ("report_waste", "use_ai_detection"): "detection",
+        ("detection", "back_to_report"): "report_waste",
+        ("detection", "apply_detection"): "report_waste",
+    }
+    return transitions.get((current_screen, action), current_screen)
+
+
 def build_machine_learning_model():
     """
     Machine Learning Section: simulation learning from a historical dataset.
@@ -180,6 +193,7 @@ class AdvancedBioenergyApp:
         self.is_camera_running = self.cap is not None and self.cap.isOpened()
         self.audio_lock = threading.Lock()
         self.last_analysis_result = None
+        self.active_screen = get_initial_screen()
 
         # 3. Create UI Interface (创建 UI 界面)
         self.create_widgets()
@@ -272,11 +286,11 @@ class AdvancedBioenergyApp:
         )
         header.pack(fill=tk.X)
 
-        main_frame = tk.Frame(self.window, bg=BG)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
+        self.content_frame = tk.Frame(self.window, bg=BG)
+        self.content_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
 
-        detection_frame = tk.LabelFrame(
-            main_frame,
+        self.detection_frame = tk.LabelFrame(
+            self.content_frame,
             text=" Deep Learning Detection ",
             font=ui_font(11, "bold"),
             bg="white",
@@ -284,12 +298,32 @@ class AdvancedBioenergyApp:
             padx=12,
             pady=10,
         )
-        detection_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
 
-        self.video_label = tk.Label(detection_frame, bg="#000000")
+        detection_header = tk.Frame(self.detection_frame, bg="white")
+        detection_header.pack(fill=tk.X, pady=(0, 8))
+        tk.Button(
+            detection_header,
+            text="Back to Report Waste",
+            font=ui_font(10, "bold"),
+            bg="white",
+            fg=GREEN_DARK,
+            command=self.show_report_interface,
+            relief=tk.GROOVE,
+            bd=2,
+        ).pack(side=tk.LEFT)
+        tk.Label(
+            detection_header,
+            text="Run image analysis, then apply the result to the report form.",
+            font=ui_font(10),
+            bg="white",
+            fg=MUTED,
+            anchor="e",
+        ).pack(side=tk.RIGHT, fill=tk.X, expand=True)
+
+        self.video_label = tk.Label(self.detection_frame, bg="#000000")
         self.video_label.pack(fill=tk.BOTH, expand=True, padx=2, pady=(0, 8))
 
-        scan_controls = tk.Frame(detection_frame, bg="white")
+        scan_controls = tk.Frame(self.detection_frame, bg="white")
         scan_controls.pack(fill=tk.X, pady=(0, 10))
 
         btn_capture = tk.Button(
@@ -314,14 +348,14 @@ class AdvancedBioenergyApp:
         )
         btn_upload.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
 
-        summary_frame = tk.Frame(detection_frame, bg="white")
+        summary_frame = tk.Frame(self.detection_frame, bg="white")
         summary_frame.pack(fill=tk.X, pady=(0, 8))
 
         self.lbl_confidence = self.create_metric(summary_frame, "Confidence", "--", 0, 0)
         self.lbl_co2e = self.create_metric(summary_frame, "CO2e reduction", "--", 0, 1)
 
         result_frame = tk.LabelFrame(
-            detection_frame,
+            self.detection_frame,
             text=" Deep learning result - Model v2.1 image analysis ",
             font=ui_font(10, "bold"),
             bg="white",
@@ -339,8 +373,8 @@ class AdvancedBioenergyApp:
         self.lbl_revenue = self.create_result_tile(result_frame, "Estimated return", "--", 2, 1)
 
         self.apply_button = tk.Button(
-            detection_frame,
-            text="Use AI Detection Information",
+            self.detection_frame,
+            text="Apply Information to Report Waste",
             font=ui_font(11, "bold"),
             bg="white",
             fg=GREEN_DARK,
@@ -353,20 +387,17 @@ class AdvancedBioenergyApp:
         )
         self.apply_button.pack(fill=tk.X, pady=(0, 2))
 
-        report_frame = tk.LabelFrame(
-            main_frame,
+        self.report_frame = tk.LabelFrame(
+            self.content_frame,
             text=" Report Waste Interface ",
             font=ui_font(11, "bold"),
             bg="white",
             fg=TEXT,
             padx=14,
             pady=12,
-            width=390,
         )
-        report_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(8, 0))
-        report_frame.pack_propagate(False)
 
-        image_card = tk.Frame(report_frame, bg=GREEN_SOFT, highlightbackground=GREEN_LINE, highlightthickness=1)
+        image_card = tk.Frame(self.report_frame, bg=GREEN_SOFT, highlightbackground=GREEN_LINE, highlightthickness=1)
         image_card.pack(fill=tk.X, pady=(0, 14))
         tk.Label(
             image_card,
@@ -390,9 +421,9 @@ class AdvancedBioenergyApp:
         self.quantity_var = tk.StringVar()
         self.location_var = tk.StringVar(value="Klang, Selangor")
 
-        self.add_field_label(report_frame, "WASTE TYPE")
+        self.add_field_label(self.report_frame, "WASTE TYPE")
         self.waste_type_combo = ttk.Combobox(
-            report_frame,
+            self.report_frame,
             textvariable=self.waste_type_var,
             values=("Cow manure", "Goat manure", "Chicken manure", "Mixed manure"),
             state="readonly",
@@ -400,21 +431,33 @@ class AdvancedBioenergyApp:
         )
         self.waste_type_combo.pack(fill=tk.X, ipady=6, pady=(0, 12))
 
-        self.add_field_label(report_frame, "ESTIMATED QUANTITY")
-        self.quantity_entry = tk.Entry(report_frame, textvariable=self.quantity_var, font=ui_font(12), relief=tk.GROOVE, bd=2)
+        self.add_field_label(self.report_frame, "ESTIMATED QUANTITY")
+        self.quantity_entry = tk.Entry(self.report_frame, textvariable=self.quantity_var, font=ui_font(12), relief=tk.GROOVE, bd=2)
         self.quantity_entry.pack(fill=tk.X, ipady=9, pady=(0, 12))
 
-        self.add_field_label(report_frame, "FARM LOCATION")
-        self.location_entry = tk.Entry(report_frame, textvariable=self.location_var, font=ui_font(12), relief=tk.GROOVE, bd=2)
+        self.add_field_label(self.report_frame, "FARM LOCATION")
+        self.location_entry = tk.Entry(self.report_frame, textvariable=self.location_var, font=ui_font(12), relief=tk.GROOVE, bd=2)
         self.location_entry.pack(fill=tk.X, ipady=9, pady=(0, 12))
 
-        self.add_field_label(report_frame, "CONDITION NOTES")
-        self.condition_text = tk.Text(report_frame, height=7, font=ui_font(11), wrap=tk.WORD, relief=tk.GROOVE, bd=2)
+        self.add_field_label(self.report_frame, "CONDITION NOTES")
+        self.condition_text = tk.Text(self.report_frame, height=7, font=ui_font(11), wrap=tk.WORD, relief=tk.GROOVE, bd=2)
         self.condition_text.insert("1.0", "Stored under covered area. Access through east gate.")
         self.condition_text.pack(fill=tk.BOTH, expand=True, pady=(0, 14))
 
         tk.Button(
-            report_frame,
+            self.report_frame,
+            text="Use AI Detection",
+            font=ui_font(12, "bold"),
+            bg="white",
+            fg=GREEN_DARK,
+            command=self.open_detection_interface,
+            relief=tk.GROOVE,
+            bd=2,
+            height=2,
+        ).pack(fill=tk.X, pady=(0, 10))
+
+        tk.Button(
+            self.report_frame,
             text="Submit Report",
             font=ui_font(12, "bold"),
             bg=GREEN_DARK,
@@ -422,6 +465,23 @@ class AdvancedBioenergyApp:
             command=self.submit_report_preview,
             height=2,
         ).pack(fill=tk.X, pady=(0, 4))
+        self.show_screen(get_initial_screen())
+
+    def show_screen(self, screen_name):
+        self.report_frame.pack_forget()
+        self.detection_frame.pack_forget()
+        if screen_name == "detection":
+            self.detection_frame.pack(fill=tk.BOTH, expand=True)
+        else:
+            self.report_frame.pack(fill=tk.BOTH, expand=True)
+            screen_name = "report_waste"
+        self.active_screen = screen_name
+
+    def open_detection_interface(self):
+        self.show_screen(get_next_screen(self.active_screen, "use_ai_detection"))
+
+    def show_report_interface(self):
+        self.show_screen(get_next_screen(self.active_screen, "back_to_report"))
 
     def create_metric(self, parent, label, value, row, column):
         card = tk.Frame(parent, bg="white", highlightbackground="#e5e7eb", highlightthickness=1)
@@ -511,6 +571,7 @@ class AdvancedBioenergyApp:
         self.quantity_var.set(report_values["estimated_quantity"])
         self.condition_text.delete("1.0", tk.END)
         self.condition_text.insert("1.0", report_values["condition_notes"])
+        self.show_screen(get_next_screen(self.active_screen, "apply_detection"))
         messagebox.showinfo("Applied", "AI detection information has been applied to the Report Waste form.")
 
     def submit_report_preview(self):
