@@ -30,6 +30,12 @@ GREEN_DARK_HOVER = "#2f6b2a"
 GREEN_DARK_ACTIVE = "#163f18"
 OUTLINE_HOVER = "#e1f3e6"
 OUTLINE_ACTIVE = "#ccebd5"
+PRIMARY_HOVER = "#e6f4ea"
+PRIMARY_ACTIVE = "#d2ead9"
+ORANGE_SOFT_HOVER = "#fff3e0"
+ORANGE_SOFT_ACTIVE = "#ffe0b2"
+GREEN_SOFT_HOVER = "#e8f5e9"
+GREEN_SOFT_ACTIVE = "#c8e6c9"
 
 
 def get_ui_font_family(platform_name=None):
@@ -51,36 +57,36 @@ def ui_font(size, weight=None):
 def get_button_palette(variant):
     palettes = {
         "primary": {
-            "bg": GREEN_DARK,
-            "fg": "white",
-            "activebackground": GREEN_DARK_ACTIVE,
-            "activeforeground": "white",
-            "hoverbackground": GREEN_DARK_HOVER,
-            "hoverforeground": "white",
+            "bg": "white",
+            "fg": "black",
+            "activebackground": PRIMARY_ACTIVE,
+            "activeforeground": "black",
+            "hoverbackground": PRIMARY_HOVER,
+            "hoverforeground": "black",
         },
         "orange": {
-            "bg": ORANGE,
-            "fg": "white",
-            "activebackground": ORANGE_ACTIVE,
-            "activeforeground": "white",
-            "hoverbackground": ORANGE_HOVER,
-            "hoverforeground": "white",
+            "bg": "white",
+            "fg": "black",
+            "activebackground": ORANGE_SOFT_ACTIVE,
+            "activeforeground": "black",
+            "hoverbackground": ORANGE_SOFT_HOVER,
+            "hoverforeground": "black",
         },
         "green": {
-            "bg": GREEN,
-            "fg": "white",
-            "activebackground": GREEN_ACTIVE,
-            "activeforeground": "white",
-            "hoverbackground": GREEN_HOVER,
-            "hoverforeground": "white",
+            "bg": "white",
+            "fg": "black",
+            "activebackground": GREEN_SOFT_ACTIVE,
+            "activeforeground": "black",
+            "hoverbackground": GREEN_SOFT_HOVER,
+            "hoverforeground": "black",
         },
         "outline": {
             "bg": "white",
-            "fg": GREEN_DARK,
+            "fg": "black",
             "activebackground": OUTLINE_ACTIVE,
-            "activeforeground": GREEN_DARK,
+            "activeforeground": "black",
             "hoverbackground": OUTLINE_HOVER,
-            "hoverforeground": GREEN_DARK,
+            "hoverforeground": "black",
         },
     }
     return palettes.get(variant, palettes["outline"]).copy()
