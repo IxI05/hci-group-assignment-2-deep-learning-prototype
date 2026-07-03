@@ -29,6 +29,9 @@ This repository represents the **Deep Learning Detection** upgrade only.
 - Report Waste interface for entering estimated quantity, location, and notes
 - Report-first workflow with AI detection opened from the form
 - Apply AI detection information back into the Report Waste form
+- Uploaded images display and analyze directly without switching back to the camera feed
+- Scrollable interface for smaller windows
+- Inline submitted status text for the prototype form
 - Voice/audio feedback after analysis
 
 ## Prototype Purpose
@@ -42,6 +45,8 @@ The prototype demonstrates how a farmer could use camera-based detection to anal
 - Estimated financial return
 
 The prototype starts on the **Report Waste** interface. From there, the user clicks **Use AI Detection** to open the detection screen. After analysis is completed, the **Apply Information to Report Waste** button automatically fills the report form with the detected manure type, quantity, and condition notes.
+
+The app starts maximized when possible. If the window is resized smaller, the interface can be scrolled so the lower controls remain accessible.
 
 ## Requirements
 

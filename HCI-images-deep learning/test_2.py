@@ -68,6 +68,29 @@ def get_next_screen(current_screen, action):
     return transitions.get((current_screen, action), current_screen)
 
 
+def get_upload_image_policy():
+    return {
+        "restart_camera_before_analysis": False,
+        "display_uploaded_image_immediately": True,
+    }
+
+
+def should_stop_audio_for_action(action):
+    return action == "apply_detection"
+
+
+def get_submit_feedback_text():
+    return "Submitted"
+
+
+def should_start_maximized():
+    return True
+
+
+def should_use_scrollable_content():
+    return True
+
+
 def build_machine_learning_model():
     """
     Machine Learning Section: simulation learning from a historical dataset.
@@ -178,8 +201,10 @@ class AdvancedBioenergyApp:
         self.window = window
         self.window.title("Farm2Energy")
         self.window.geometry("1120x780")
-        self.window.minsize(1040, 720)
+        self.window.minsize(860, 620)
         self.window.configure(bg=BG)
+        if should_start_maximized():
+            self.maximize_window()
 
         # Initialize the AI ​​voice engine
     
@@ -192,6 +217,9 @@ class AdvancedBioenergyApp:
         self.current_frame = None
         self.is_camera_running = self.cap is not None and self.cap.isOpened()
         self.audio_lock = threading.Lock()
+        self.speech_stop_event = threading.Event()
+        self.speech_process = None
+        self.speech_engine = None
         self.last_analysis_result = None
         self.active_screen = get_initial_screen()
 
@@ -209,12 +237,48 @@ class AdvancedBioenergyApp:
         self.video_thread = threading.Thread(target=self.video_stream_loop, daemon=True)
         self.video_thread.start()
 
+    def maximize_window(self):
+        try:
+            self.window.state("zoomed")
+            return
+        except tk.TclError:
+            pass
+
+        try:
+            self.window.attributes("-zoomed", True)
+            return
+        except tk.TclError:
+            pass
+
+        screen_width = self.window.winfo_screenwidth()
+        screen_height = self.window.winfo_screenheight()
+        self.window.geometry(f"{screen_width}x{screen_height}+0+0")
+
+    def stop_audio_feedback(self):
+        self.speech_stop_event.set()
+        process = self.speech_process
+        if process is not None and process.poll() is None:
+            try:
+                process.terminate()
+            except Exception as e:
+                print(f"[Audio Error] Unable to stop speech process: {e}")
+
+        engine = self.speech_engine
+        if engine is not None:
+            try:
+                engine.stop()
+            except Exception:
+                pass
+
     def speak_results_async(self, result):
         """
         Audio API Technique: 
         Plays the completion chime and spoken report in one ordered background
         task so macOS does not cut off the speech.
         """
+        self.stop_audio_feedback()
+        self.speech_stop_event = threading.Event()
+        stop_event = self.speech_stop_event
         text = (
             "Analysis complete. "
             f"The model confidence is {result['confidence_rate']} percent. "
@@ -225,30 +289,45 @@ class AdvancedBioenergyApp:
 
         def speak():
             with self.audio_lock:
+                if stop_event.is_set():
+                    return
                 play_alert_sound()
-                self.speak_text(text)
+                if not stop_event.is_set():
+                    self.speak_text(text, stop_event)
 
         # Execute asynchronously so the GUI doesn't freeze or lag during speech.
         # This is intentionally non-daemon so the announcement can finish cleanly.
         speech_thread = threading.Thread(target=speak)
         speech_thread.start()
 
-    def speak_text(self, text):
+    def speak_text(self, text, stop_event=None):
         """Speak text using the most reliable available engine for the platform."""
+        stop_event = stop_event or threading.Event()
         if sys.platform == "darwin":
+            process = None
             try:
-                subprocess.run(
+                process = subprocess.Popen(
                     ["say", "-r", "155", text],
-                    check=False,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
+                self.speech_process = process
+                while process.poll() is None:
+                    if stop_event.is_set():
+                        process.terminate()
+                        process.wait(timeout=1)
+                        return
+                    time.sleep(0.05)
                 return
             except Exception as e:
                 print(f"[Audio Error] macOS speech playback failed: {e}")
+            finally:
+                if self.speech_process is process:
+                    self.speech_process = None
 
         try:
             engine = pyttsx3.init()
+            self.speech_engine = engine
             engine.setProperty('rate', 155)
             engine.setProperty('volume', 1.0)
 
@@ -259,10 +338,21 @@ class AdvancedBioenergyApp:
                     break
 
             engine.say(text)
-            engine.runAndWait()
-            engine.stop()
+            engine.startLoop(False)
+            while engine.isBusy():
+                if stop_event.is_set():
+                    engine.stop()
+                    break
+                engine.iterate()
+                time.sleep(0.05)
+            try:
+                engine.endLoop()
+            except RuntimeError:
+                pass
         except Exception as e:
             print(f"[Audio Error] Speech engine playback failed: {e}")
+        finally:
+            self.speech_engine = None
     
 
     def train_machine_learning_model(self):
@@ -288,9 +378,21 @@ class AdvancedBioenergyApp:
 
         self.content_frame = tk.Frame(self.window, bg=BG)
         self.content_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
+        self.content_canvas = tk.Canvas(self.content_frame, bg=BG, highlightthickness=0)
+        self.content_scrollbar = tk.Scrollbar(self.content_frame, orient=tk.VERTICAL, command=self.content_canvas.yview)
+        self.content_canvas.configure(yscrollcommand=self.content_scrollbar.set)
+        self.content_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.content_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.screen_container = tk.Frame(self.content_canvas, bg=BG)
+        self.screen_window = self.content_canvas.create_window((0, 0), window=self.screen_container, anchor="nw")
+        self.screen_container.bind("<Configure>", self.update_scroll_region)
+        self.content_canvas.bind("<Configure>", self.resize_scroll_window)
+        self.content_canvas.bind_all("<MouseWheel>", self.on_mousewheel)
+        self.content_canvas.bind_all("<Button-4>", self.on_mousewheel)
+        self.content_canvas.bind_all("<Button-5>", self.on_mousewheel)
 
         self.detection_frame = tk.LabelFrame(
-            self.content_frame,
+            self.screen_container,
             text=" Deep Learning Detection ",
             font=ui_font(11, "bold"),
             bg="white",
@@ -388,7 +490,7 @@ class AdvancedBioenergyApp:
         self.apply_button.pack(fill=tk.X, pady=(0, 2))
 
         self.report_frame = tk.LabelFrame(
-            self.content_frame,
+            self.screen_container,
             text=" Report Waste Interface ",
             font=ui_font(11, "bold"),
             bg="white",
@@ -465,6 +567,14 @@ class AdvancedBioenergyApp:
             command=self.submit_report_preview,
             height=2,
         ).pack(fill=tk.X, pady=(0, 4))
+        self.submit_status_label = tk.Label(
+            self.report_frame,
+            text="",
+            font=ui_font(11, "bold"),
+            bg="white",
+            fg=GREEN_DARK,
+        )
+        self.submit_status_label.pack(fill=tk.X, pady=(6, 0))
         self.show_screen(get_initial_screen())
 
     def show_screen(self, screen_name):
@@ -476,6 +586,25 @@ class AdvancedBioenergyApp:
             self.report_frame.pack(fill=tk.BOTH, expand=True)
             screen_name = "report_waste"
         self.active_screen = screen_name
+        self.window.after_idle(self.reset_scroll_position)
+
+    def update_scroll_region(self, _event=None):
+        self.content_canvas.configure(scrollregion=self.content_canvas.bbox("all"))
+
+    def resize_scroll_window(self, event):
+        self.content_canvas.itemconfigure(self.screen_window, width=event.width)
+
+    def reset_scroll_position(self):
+        self.content_canvas.yview_moveto(0)
+        self.update_scroll_region()
+
+    def on_mousewheel(self, event):
+        if event.num == 4:
+            self.content_canvas.yview_scroll(-1, "units")
+        elif event.num == 5:
+            self.content_canvas.yview_scroll(1, "units")
+        elif event.delta:
+            self.content_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
     def open_detection_interface(self):
         self.show_screen(get_next_screen(self.active_screen, "use_ai_detection"))
@@ -518,7 +647,7 @@ class AdvancedBioenergyApp:
                 self.is_camera_running = False
                 break
             ret, frame = self.cap.read()
-            if ret:
+            if ret and self.is_camera_running:
                 self.current_frame = cv2.resize(frame, (500, 380))
                 # 转换颜色并在界面显示
                 cv_img = cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2RGB)
@@ -566,19 +695,18 @@ class AdvancedBioenergyApp:
             messagebox.showwarning("No analysis", "Please complete AI detection before applying information.")
             return
 
+        if should_stop_audio_for_action("apply_detection"):
+            self.stop_audio_feedback()
         report_values = format_report_values(self.last_analysis_result)
         self.waste_type_var.set(report_values["waste_type"])
         self.quantity_var.set(report_values["estimated_quantity"])
         self.condition_text.delete("1.0", tk.END)
         self.condition_text.insert("1.0", report_values["condition_notes"])
         self.show_screen(get_next_screen(self.active_screen, "apply_detection"))
-        messagebox.showinfo("Applied", "AI detection information has been applied to the Report Waste form.")
+        self.submit_status_label.config(text="AI detection information applied.")
 
     def submit_report_preview(self):
-        messagebox.showinfo(
-            "Prototype only",
-            "This HCI prototype shows the Report Waste interface only. No report is sent to a real system.",
-        )
+        self.submit_status_label.config(text=get_submit_feedback_text())
 
     def capture_and_analyze(self):
         """Photo and button action"""
@@ -591,7 +719,7 @@ class AdvancedBioenergyApp:
 
     def upload_file_analyze(self):
         """Restore camera or upload local file"""
-        self.is_camera_running = True # 重新激活camera流
+        self.is_camera_running = False
         file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg *.jpeg *.png")])
         if file_path:
             img = cv2.imread(file_path)
@@ -599,7 +727,16 @@ class AdvancedBioenergyApp:
                 messagebox.showerror("Image error", "The selected image could not be opened.")
                 return
             img_resized = cv2.resize(img, (500, 380))
+            self.current_frame = img_resized.copy()
+            self.show_processed_image(img_resized)
             self.process_and_ml_predict(img_resized)
+
+    def show_processed_image(self, image):
+        rgb_img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        img_to_show = Image.fromarray(rgb_img)
+        imgtk = ImageTk.PhotoImage(image=img_to_show)
+        self.video_label.config(image=imgtk, text="")
+        self.video_label.image = imgtk
 
     def __del__(self):
         if hasattr(self, 'cap') and self.cap is not None:
