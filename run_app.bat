@@ -18,7 +18,7 @@ if %errorlevel%==0 (
   )
 )
 
-%PYTHON% "HCI-images-deep learning\test_2.py"
+%PYTHON% "HCI-images-deep learning\farm2energy_detection_prototype.py"
 set "STATUS=%errorlevel%"
 
 if not "%STATUS%"=="0" (

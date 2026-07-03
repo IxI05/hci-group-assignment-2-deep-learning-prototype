@@ -15,7 +15,7 @@ if [ -z "$PYTHON" ]; then
   exit 1
 fi
 
-"$PYTHON" "HCI-images-deep learning/test_2.py"
+"$PYTHON" "HCI-images-deep learning/farm2energy_detection_prototype.py"
 status=$?
 
 if [ "$status" -ne 0 ]; then

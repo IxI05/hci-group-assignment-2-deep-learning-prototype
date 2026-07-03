@@ -57,7 +57,7 @@ run_app.command
 Or run manually:
 
 ```sh
-python3 "HCI-images-deep learning/test_2.py"
+python3 "HCI-images-deep learning/farm2energy_detection_prototype.py"
 ```
 
 ## Run on Windows
@@ -71,7 +71,7 @@ run_app.bat
 Or run manually:
 
 ```bat
-py -3 "HCI-images-deep learning\test_2.py"
+py -3 "HCI-images-deep learning\farm2energy_detection_prototype.py"
 ```
 
 ## Notes
