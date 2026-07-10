@@ -7,3 +7,7 @@ __pycache__/
 venv/
 env/
 
+# Generated report artifacts
+reports/
+build_feature_development_report.py
+build_4_4_prototype_feature_development.py
